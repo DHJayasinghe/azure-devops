@@ -1,8 +1,14 @@
-$organization = "ORGANIZATION_NAME"
-$project = "PROJECT_NAME"
-$targetBranch = "refs/heads/BRANCH_NAME" 
-$pat = "PAT_TOKEN"
-$repositories = @("repo-backend", "repo-frontend")
+# $organization = "ORGANIZATION_NAME"
+# $project = "PROJECT_NAME"
+# $targetBranch = "refs/heads/BRANCH_NAME" 
+# $pat = "PAT_TOKEN"
+# $repositories = @("repo-backend", "repo-frontend")
+
+$organization = "Next-Technology"
+$project = "Ecom.Sale"
+$targetBranch = "refs/heads/release/deployment-july-2025-sale" 
+$pat = "BE75pwmELxYeLpUDIg4Q20LDyhqXzR9lZTE5cBTTZbg3wJD0GhxlJQQJ99BDACAAAAApUUOzAAASAZDO1GQ7"
+$repositories = @("ecm-sale-frontend", "ecm-sale-admin", "ecm-sale-admin-frontend", "ecm-sale-mainframe-agents", "ecm-sale-payments-agents", "ecm-sale-session-agents", "ecm-vip-searchfeed")
 
 # Encode PAT for Basic Auth
 $headers = @{
@@ -60,3 +66,56 @@ $distinctTicketIds = $allTicketIds | Sort-Object -Unique
 Write-Output "========================================="
 Write-Output "All Linked Ticket IDs (Distinct across repositories):"
 $distinctTicketIds
+
+
+Write-Output "========================================="
+Write-Output "Checking #Release- tags on each ticket..."
+
+function Has-ReleaseTag {
+    param (
+        [string]$organization,
+        [string]$project,
+        [string]$ticketId,
+        [hashtable]$headers
+    )
+
+    $workItemUrl = "https://dev.azure.com/$organization/$project/_apis/wit/workitems/${ticketId}?api-version=7.1-preview.3"
+
+    Write-Host $workItemUrl
+
+    try {
+        $workItemResponse = Invoke-RestMethod -Uri $workItemUrl -Headers $headers -Method Get
+    }
+    catch {
+        Write-Host "Failed to fetch work item: $ticketId"
+        return $false
+    }
+
+    $tagsString = $workItemResponse.fields.'System.Tags'
+
+    if ($null -eq $tagsString) {
+        return $false
+    }
+
+    $tags = $tagsString -split ';'
+
+    foreach ($tag in $tags) {
+        if ($tag.Trim().StartsWith("#Release-")) {
+            return $true
+        }
+    }
+
+    return $false
+}
+
+
+foreach ($ticketId in $distinctTicketIds) {
+    $hasReleaseTag = Has-ReleaseTag -organization $organization -project $project -ticketId $ticketId -headers $headers
+
+    if ($hasReleaseTag) {
+        Write-Host "Ticket $ticketId already has a #Release- tag."
+    }
+    else {
+        Write-Host "Ticket $ticketId does NOT have a #Release- tag."
+    }
+}
