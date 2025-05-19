@@ -1,9 +1,12 @@
 $organization = "ORGANIZATION_NAME"
 $project = "PROJECT_NAME"
-$targetBranch = "refs/heads/BRANCH_NAME" 
+
 $pat = "PAT_TOKEN"
+$targetBranch = "release/BRANCH_NAME" 
+$primaryReleaseTag = "july-sale-25"
+$newVersionTag = "#Release-July25-v3"
+
 $repositories = @("repo-backend", "repo-frontend")
-$newReleaseTag = "#Release-July25-v3"
 
 # Encode PAT for Basic Auth
 $headers = @{
@@ -115,7 +118,7 @@ function Add-ReleaseTag {
         [string]$project,
         [string]$ticketId,
         [hashtable]$headers,
-        [string]$newReleaseTag
+        [string]$newVersionTag
     )
 
     $workItemUrl = "https://dev.azure.com/$organization/$project/_apis/wit/workitems/${ticketId}?api-version=7.1-preview.3"
@@ -133,10 +136,10 @@ function Add-ReleaseTag {
     $existingTags = $workItemResponse.fields.'System.Tags'
 
     if ($null -eq $existingTags) {
-        $updatedTags = $newReleaseTag
+        $updatedTags = $newVersionTag
     }
     else {
-        $updatedTags = "$existingTags; $newReleaseTag"
+        $updatedTags = "$existingTags; $newVersionTag"
     }
 
     Write-Host "New Tag(s) to be added: $updatedTags"
@@ -160,7 +163,7 @@ function Add-ReleaseTag {
 
     try {
         Invoke-RestMethod -Uri $workItemUrl -Headers $headers -Method Patch -Body $body -ContentType "application/json-patch+json"
-        Write-Host "✅ Added $newReleaseTag to Ticket $ticketId."
+        Write-Host "✅ Added $newVersionTag to Ticket $ticketId."
     }
     catch {
         Write-Host "❌ Failed to update Ticket $ticketId. Error: $_"
@@ -173,5 +176,6 @@ foreach ($ticketId in $distinctTicketIds) {
 
     if ($canAddReleaseTag) {
         Write-Host "✅ Ticket $ticketId has $primaryReleaseTag but no #Release- tag."
+        # Add-ReleaseTag -organization $organization -project $project -ticketId $ticketId -headers $headers -newVersionTag $newVersionTag
     }
 }
