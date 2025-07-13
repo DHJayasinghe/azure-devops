@@ -1,20 +1,3 @@
-$organization = "ORGANIZATION_NAME"
-$project = "PROJECT_NAME"
-
-$pat = "PAT_TOKEN"
-$targetBranch = "release/BRANCH_NAME" 
-$primaryReleaseTag = "july-sale-25"
-$newVersionTag = "#Release-July25-v3"
-
-$repositories = @("repo-backend", "repo-frontend")
-
-# Encode PAT for Basic Auth
-$headers = @{
-    Authorization = ("Basic {0}" -f [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes(":$pat")))
-}
-
-$allTicketIds = @()
-
 function Get-BranchCommits {
     param (
         [string]$organization,
@@ -40,34 +23,6 @@ function Get-BranchCommits {
     }
 }
 
-# Loop through each repository
-foreach ($repository in $repositories) {
-    Write-Output "Processing repository: $repository"
-
-    # Get all commits from the target branch
-    $commits = Get-BranchCommits -organization $organization -project $project -repository $repository -branchName $targetBranch -headers $headers
-    
-    Write-Output "Found $($commits.Count) commits in branch $targetBranch"
-
-    # Process each commit
-    foreach ($commit in $commits) {
-        # Get work items directly from the commit object
-        $ticketIds = $commit.workItems | ForEach-Object { $_.id }
-        $allTicketIds += $ticketIds
-    }
-}
-
-# Step 3: Get distinct Ticket IDs
-$distinctTicketIds = $allTicketIds | Sort-Object -Unique
-
-# Output
-Write-Output "========================================="
-Write-Output "All Linked Ticket IDs (Distinct across repositories):"
-$distinctTicketIds
-
-Write-Output "========================================="
-Write-Output "Checking #Release- tags on each ticket..."
-
 function Has-ReleaseTag {
     param (
         [string]$organization,
@@ -83,7 +38,7 @@ function Has-ReleaseTag {
         $workItemResponse = Invoke-RestMethod -Uri $workItemUrl -Headers $headers -Method Get
     }
     catch {
-        Write-Host "Failed to fetch work item: $ticketId"
+        Write-Host "Failed to fetch work item: $ticketId. Error: $_"
         return $false
     }
 
@@ -188,7 +143,7 @@ function Update-KanbanColumn {
         return
     }
 
-    $columnField = 'WEF_C20432DD5A1E4B66931BC16E0AC05E8C_Kanban.Column'
+    $columnField = $boardColumnField
     $currentColumn = $workItemResponse.fields.$columnField
 
     Write-Host "📌 Current Kanban Column: $currentColumn"
@@ -226,12 +181,29 @@ function Update-KanbanColumn {
     }
 }
 
-foreach ($ticketId in $distinctTicketIds) {
-    $canAddReleaseTag = Has-ReleaseTag -organization $organization -project $project -ticketId $ticketId -headers $headers -primaryReleaseTag $primaryReleaseTag
+function Get-LinkedTicketIdsFromRepos {
+    param (
+        [string]$organization,
+        [string]$project,
+        [string[]]$repositories,
+        [string]$targetBranch,
+        [hashtable]$headers
+    )
 
-    if ($canAddReleaseTag) {
-        Write-Host "✅ Ticket $ticketId has $primaryReleaseTag but no #Release- tag."
-        Add-ReleaseTag -organization $organization -project $project -ticketId $ticketId -headers $headers -newVersionTag $newVersionTag > $null
-        Update-KanbanColumn -organization $organization -project $project -ticketId $ticketId -headers $headers > $null
-   }
+    $allTicketIds = @()
+
+    foreach ($repository in $repositories) {
+        Write-Host "Processing repository: $repository"
+
+        $commits = Get-BranchCommits -organization $organization -project $project -repository $repository -branchName $targetBranch -headers $headers
+        
+        Write-Host "Found $($commits.Count) commits in branch $targetBranch"
+        
+        foreach ($commit in $commits) {
+            $ticketIds = $commit.workItems | ForEach-Object { $_.id }
+            $allTicketIds += $ticketIds
+        }
+    }
+    $distinctTicketIds = $allTicketIds | Sort-Object -Unique
+    return $distinctTicketIds
 }
