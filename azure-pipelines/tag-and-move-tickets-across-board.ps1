@@ -47,6 +47,6 @@ foreach ($ticketId in $distinctTicketIds) {
 Write-Host "✅ Tagged & Moved $($taggedTicketIds.Count) tickets successfully"
 
 # Save tagged ticket IDs to a file
-$outputFile = "Tagged-Tickets-$(Get-Date -Format 'yyyyMMdd_HHmmss').txt"
+$outputFile = "Release-Tagged-Tickets-$(Get-Date -Format 'yyyyMMdd_HHmmss').txt"
 $taggedTicketIds | Out-File -FilePath $outputFile -Encoding UTF8
 Write-Host "📄 Tagged ticket IDs saved to: $outputFile"

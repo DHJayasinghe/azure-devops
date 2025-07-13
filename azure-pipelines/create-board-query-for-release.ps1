@@ -98,7 +98,14 @@ foreach ($query in $queriesToCreate) {
     $queryLinks[$query.Name] = $url
 }
 
-Write-Host "`n🔗 Final Query URLs:"
+# Write-Host "`n🔗 Final Query URLs:"
+# $queryLinks.GetEnumerator() | ForEach-Object {
+#     Write-Host "$($_.Key): $($_.Value)"
+# }
+
+# Write queryLinks to a file
+$outputFile = "Release-Query-Links-$(Get-Date -Format 'yyyyMMdd-HHmmss').txt"
 $queryLinks.GetEnumerator() | ForEach-Object {
-    Write-Host "$($_.Key): $($_.Value)"
+    "$($_.Key): $($_.Value)" | Out-File -FilePath $outputFile -Encoding UTF8 -Append
 }
+Write-Host "`n💾 Query links saved to: $outputFile"
