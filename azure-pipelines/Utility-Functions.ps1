@@ -11,7 +11,7 @@ function Get-BranchCommits {
     $currentYear = (Get-Date).Year
     $fromDate = "$currentYear-01-01T00:00:00Z"
     
-    $commitsUrl = "https://dev.azure.com/$organization/$project/_apis/git/repositories/$repository/commits?searchCriteria.itemVersion.version=$branchName&api-version=7.1-preview.1&searchCriteria.includeWorkItems=true&searchCriteria.fromDate=$fromDate&searchCriteria.$top=500"
+    $commitsUrl = "https://dev.azure.com/$organization/$project/_apis/git/repositories/$repository/commits?searchCriteria.itemVersion.version=$branchName&api-version=7.1&searchCriteria.includeWorkItems=true&searchCriteria.fromDate=$fromDate&searchCriteria.$top=500"
     
     try {
         $response = Invoke-RestMethod -Uri $commitsUrl -Headers $headers -Method Get
@@ -207,4 +207,76 @@ function Get-LinkedTicketIdsFromRepos {
     }
     $distinctTicketIds = $allTicketIds | Sort-Object -Unique
     return $distinctTicketIds
+}
+
+function Get-PendingPipelineRuns {
+    param (
+        [string]$organization,
+        [string]$project,
+        [string]$branchName,
+        [hashtable]$headers
+    )
+
+    $pipelinesUrl = "https://dev.azure.com/$organization/$project/_apis/pipelines?api-version=7.1"
+    
+    try {
+        $pipelines = Invoke-RestMethod -Uri $pipelinesUrl -Headers $headers -Method Get
+        $pendingRuns = @()
+
+        foreach ($pipeline in $pipelines.value) {
+            $runsUrl = "https://dev.azure.com/$organization/$project/_apis/pipelines/$($pipeline.id)/runs?api-version=7.1&branchName=$($branchName)"
+            
+            $runs = Invoke-RestMethod -Uri $runsUrl -Headers $headers -Method Get
+
+            # Get the latest run that needs approval
+            $latestPendingRun = $runs.value | 
+                Where-Object { $_.state -eq 'inProgress' } | 
+                Sort-Object createdDate -Descending | 
+                Select-Object -First 1
+
+            if ($latestPendingRun) {
+                $pendingRuns += [PSCustomObject]@{
+                    PipelineId = $pipeline.id
+                    PipelineName = $pipeline.name
+                    BuildId = $latestPendingRun.id
+                    CreatedDate = $latestPendingRun.createdDate
+                    BuildName = $latestPendingRun.name
+                    BuildUrl = "https://dev.azure.com/$organization/$project/_build/results?buildId=$($latestPendingRun.id)"
+                }
+            }
+        }
+
+        return $pendingRuns
+    }
+    catch {
+        Write-Host "Failed to fetch pipeline runs: $_"
+        return @()
+    }
+}
+
+function Approve-PipelineRun {
+    param (
+        [string]$organization,
+        [string]$project,
+        [int]$pipelineId,
+        [int]$runId,
+        [hashtable]$headers
+    )
+
+    $approveUrl = "https://dev.azure.com/$organization/$project/_apis/pipelines/$pipelineId/runs/$runId/approve?api-version=7.1"
+    
+    try {
+        $body = @{
+            status = "approved"
+            comment = "Auto-approved by release tagging script"
+        } | ConvertTo-Json
+
+        Invoke-RestMethod -Uri $approveUrl -Headers $headers -Method Post -Body $body -ContentType "application/json"
+        Write-Host "✅ Approved pipeline run $runId for pipeline $pipelineId"
+        return $true
+    }
+    catch {
+        Write-Host "❌ Failed to approve pipeline run $runId for pipeline $pipelineId : $_"
+        return $false
+    }
 }

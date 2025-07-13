@@ -3,7 +3,7 @@ $uatDeploymentPrep = $false
 $prodDeploymentPrep = $true
 
 # Change when expired - IMPORTANT
-$pat = "PAT_TOKEN"
+$pat = "YOUR_PAT_TOKEN"
 
 # Change during every release - IMPORTANT
 $newUATVersionTag = "#Release-Sep25-v2"
@@ -26,6 +26,7 @@ $boardColumnMapping = @{
 }
 $releaseQueryProjectName = "OnlineTech.Backlog"
 $releaseQueryFolderPath = "Shared Queries/Sale/Releases"
+$changeRequestSearchPrefix = "Create New ServiceNow Change Request"
 
 
 if($uatDeploymentPrep)
@@ -75,5 +76,14 @@ if($prodDeploymentPrep)
         -queriesToCreate @(
             @{ Name = "All"; Mode = "Merge" }, 
             @{ Name = $prodDropNumber; Mode = "Replace" }
-        )    
+        )
+
+    Write-Host "Step 3 - Extracting Release Information"
+
+    .\extract-release-information.ps1 `
+        -organization $organization `
+        -project $project  `
+        -pat $pat `
+        -targetBranch $targetBranch `
+        -changeRequestSearchPrefix $changeRequestSearchPrefix
 }
