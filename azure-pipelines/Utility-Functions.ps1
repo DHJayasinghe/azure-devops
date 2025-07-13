@@ -29,7 +29,8 @@ function Has-ReleaseTag {
         [string]$project,
         [string]$ticketId,
         [hashtable]$headers,
-        [string]$primaryReleaseTag
+        [string]$primaryReleaseTag,
+        [string]$tagPrefix
     )
 
     $workItemUrl = "https://dev.azure.com/$organization/$project/_apis/wit/workitems/${ticketId}?api-version=7.1-preview.3"
@@ -57,7 +58,7 @@ function Has-ReleaseTag {
         if ($tag -eq $primaryReleaseTag) {
             $hasPrimaryTag = $true
         }
-        if ($tag.StartsWith("#Release-")) {
+        if ($tag.StartsWith($tagPrefix)) {
             $hasReleaseTag = $true
         }
     }
@@ -76,8 +77,6 @@ function Add-ReleaseTag {
     )
 
     $workItemUrl = "https://dev.azure.com/$organization/$project/_apis/wit/workitems/${ticketId}?api-version=7.1-preview.3"
-
-    Write-Host $workItemUrl
 
     try {
         $workItemResponse = Invoke-RestMethod -Uri $workItemUrl -Headers $headers -Method Get
@@ -129,7 +128,8 @@ function Update-KanbanColumn {
         [string]$organization,
         [string]$project,
         [string]$ticketId,
-        [hashtable]$headers
+        [hashtable]$headers,
+        [hashtable]$columnMapping
     )
 
     $workItemUrl = "https://dev.azure.com/$organization/$project/_apis/wit/workitems/${ticketId}?api-version=7.1-preview.3"
@@ -148,11 +148,12 @@ function Update-KanbanColumn {
 
     Write-Host "📌 Current Kanban Column: $currentColumn"
 
-    if ($currentColumn -eq "CI Testing") {
-        $newColumn = "UAT Testing"
+    # Check if current column exists in the mapping
+    if ($columnMapping.ContainsKey($currentColumn)) {
+        $newColumn = $columnMapping[$currentColumn]
     }
     else {
-        $newColumn = "Deployed to UAT"
+        $newColumn = $columnMapping['Default']
     }
 
     Write-Host "🔄 Updating Kanban column to: $newColumn"

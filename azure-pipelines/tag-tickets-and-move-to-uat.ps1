@@ -4,8 +4,10 @@ param (
     [string]$pat,
     [string]$targetBranch,
     [string]$primaryReleaseTag,
+    [string]$newVersionTagPrefix, 
     [string]$newVersionTag,
     [string]$boardColumnField,
+    [hashtable]$boardColumnMapping,
     [string[]]$repositories
 )
 
@@ -24,18 +26,21 @@ Write-Host "Found $($distinctTicketIds.Count) Linked Ticket IDs (Distinct across
 # $distinctTicketIds
 
 Write-Host "========================================="
-Write-Host "Checking #Release- tags on each ticket..."
+Write-Host "Checking $newVersionTagPrefix tags on each ticket..."
 
 $taggedTicketIds = @()  # Array to store tagged ticket IDs
 
 foreach ($ticketId in $distinctTicketIds) {
-    $canAddReleaseTag = Has-ReleaseTag -organization $organization -project $project -ticketId $ticketId -headers $headers -primaryReleaseTag $primaryReleaseTag
+    $canAddReleaseTag = Has-ReleaseTag -organization $organization -project $project -ticketId $ticketId -headers $headers -primaryReleaseTag $primaryReleaseTag -tagPrefix $newVersionTagPrefix
 
     if ($canAddReleaseTag) {
-        Write-Host "✅ Ticket $ticketId has $primaryReleaseTag but no #Release- tag."
+        Write-Host "✅ Ticket $ticketId has $primaryReleaseTag but no $newVersionTagPrefix tag."
         Add-ReleaseTag -organization $organization -project $project -ticketId $ticketId -headers $headers -newVersionTag $newVersionTag > $null
         $taggedTicketIds += $ticketId  # Add ticket ID to the array
-        Update-KanbanColumn -organization $organization -project $project -ticketId $ticketId -headers $headers > $null
+        if($boardColumnMapping.Count -gt 0){
+            Write-Host "Moving tickets across the board"
+            Update-KanbanColumn -organization $organization -project $project -ticketId $ticketId -headers $headers -columnMapping $boardColumnMapping > $null
+        }
    }
 }
 
