@@ -320,7 +320,7 @@ function Set-RepoTag {
         $deleteBody = "[$deleteBody]"
 
         Invoke-RestMethod -Uri $deleteTagUrl -Headers $headers -Method Post -Body $deleteBody -ContentType "application/json" > $null
-        Write-Host "Deleted existing tag '$tagName'"
+        Write-Host "✅ Deleted existing tag '$tagName'"
     }
 
     # Get the latest commit ID on the given branch
@@ -340,5 +340,5 @@ function Set-RepoTag {
     } | ConvertTo-Json -Depth 5
 
     Invoke-RestMethod -Uri $createTagUrl -Headers $headers -Method Post -Body $tagBody -ContentType "application/json" > $null
-    Write-Host "Created tag '$tagName' with description '$description' on repo '$repoName'"
+    Write-Host "✅ Created tag '$tagName' with description '$description' on repo '$repoName'"
 }
