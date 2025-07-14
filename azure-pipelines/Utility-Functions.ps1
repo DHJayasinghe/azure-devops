@@ -218,6 +218,8 @@ function Get-LatestPipelineRuns {
         [array]$pipelines
     )
 
+    $branchRef = if ($branchName -like 'refs/heads/*') { $branchName } else { "refs/heads/$branchName" }
+
     $pipelinesUrl = "https://dev.azure.com/$organization/$project/_apis/pipelines?api-version=7.1"
     
     try {
@@ -225,26 +227,24 @@ function Get-LatestPipelineRuns {
         $pendingRuns = @()
 
         foreach ($pipeline in $allPipelines.value) {
-            if ($pipelines -contains $pipeline.name) 
-            {
-                $runsUrl = "https://dev.azure.com/$organization/$project/_apis/pipelines/$($pipeline.id)/runs?api-version=7.1&branchName=$($branchName)"
-                
-                $runs = Invoke-RestMethod -Uri $runsUrl -Headers $headers -Method Get
+            if ($pipelines -contains $pipeline.name) {
+                $buildsUrl = "https://dev.azure.com/$organization/$project/_apis/build/builds?definitions=$($pipeline.id)&branchName=$($branchRef)&api-version=7.1"
 
-                # Get the latest run that needs approval
-                $latestPendingRun = $runs.value | 
-                    # Where-Object { $_.state -eq 'inProgress' } | 
-                    Sort-Object createdDate -Descending | 
+                $buildsResponse = Invoke-RestMethod -Uri $buildsUrl -Headers $headers -Method Get
+
+                $latestBuild = $buildsResponse.value |
+                    Where-Object { $_.status -in @('completed', 'inProgress') } |
+                    Sort-Object id -Descending |
                     Select-Object -First 1
 
-                if ($latestPendingRun) {
+                if ($latestBuild) {
                     $pendingRuns += [PSCustomObject]@{
-                        PipelineId = $pipeline.id
+                        PipelineId   = $pipeline.id
                         PipelineName = $pipeline.name
-                        BuildId = $latestPendingRun.id
-                        CreatedDate = $latestPendingRun.createdDate
-                        BuildName = $latestPendingRun.name
-                        BuildUrl = "https://dev.azure.com/$organization/$project/_build/results?buildId=$($latestPendingRun.id)"
+                        BuildId      = $latestBuild.id
+                        CreatedDate  = $latestBuild.queueTime
+                        BuildName    = $latestBuild.buildNumber
+                        BuildUrl     = $latestBuild._links.web.href
                     }
                 }
             }
@@ -253,7 +253,7 @@ function Get-LatestPipelineRuns {
         return $pendingRuns
     }
     catch {
-        Write-Host "Failed to fetch pipeline runs: $_"
+        Write-Host "❌ Failed to fetch pipeline runs: $_"
         return @()
     }
 }
