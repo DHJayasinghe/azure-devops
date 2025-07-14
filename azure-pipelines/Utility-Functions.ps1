@@ -284,3 +284,61 @@ function Approve-PipelineRun {
         return $false
     }
 }
+
+function Set-RepoTag {
+    param (
+        [string]$organization,
+        [string]$project,
+        [string]$repoName,
+        [string]$branchName,
+        [string]$tagName,
+        [string]$description,
+        [hashtable]$headers
+    )
+
+    # Base URLs
+    $baseUrl = "https://dev.azure.com/$organization/$project/_apis/git/repositories/$repoName"
+    $apiVersion = "7.1"
+
+    # Check if tag exists
+    $checkTagUrl = "$baseUrl/refs?filter=tags/$tagName&api-version=$apiVersion"
+    $existingTag = Invoke-RestMethod -Uri $checkTagUrl -Headers $headers -Method Get
+
+    if ($existingTag.count -gt 0 -and $existingTag.value.Count -gt 0) {
+        # Delete existing tag using special zeroed ObjectId
+        $deleteTagUrl = "$baseUrl/refs?api-version=$apiVersion"
+        $oldObjectId = $existingTag.value[0].objectId
+
+        $deleteBody = @(
+            @{
+                name         = "refs/tags/$($tagName)"
+                oldObjectId  = $oldObjectId
+                newObjectId  = "0000000000000000000000000000000000000000"
+            }
+        ) | ConvertTo-Json -Depth 5
+
+        $deleteBody = "[$deleteBody]"
+
+        Invoke-RestMethod -Uri $deleteTagUrl -Headers $headers -Method Post -Body $deleteBody -ContentType "application/json" > $null
+        Write-Host "Deleted existing tag '$tagName'"
+    }
+
+    # Get the latest commit ID on the given branch
+    $commitUrl = "$baseUrl/commits?searchCriteria.itemVersion.version=$branchName&`$top=1&api-version=$apiVersion"
+    $commitResp = Invoke-RestMethod -Uri $commitUrl -Headers $headers -Method Get
+    $commitId = $commitResp.value[0].commitId
+
+    # Create the annotated tag
+    $createTagUrl = "$baseUrl/annotatedtags?api-version=$apiVersion"
+    $tagBody = @{
+        name         = $tagName
+        taggedObject = @{
+            objectId   = $commitId
+            objectType = "commit"
+        }
+        message      = $description
+    } | ConvertTo-Json -Depth 5
+
+    Invoke-RestMethod -Uri $createTagUrl -Headers $headers -Method Post -Body $tagBody -ContentType "application/json" > $null
+    Write-Host "Created tag '$tagName' with description '$description' on repo '$repoName'"
+}
