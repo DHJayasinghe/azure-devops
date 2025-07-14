@@ -3,7 +3,8 @@ param (
     [string]$project,
     [string]$pat,
     [string]$targetBranch,
-    [string]$changeRequestSearchPrefix
+    [string]$changeRequestSearchPrefix,
+    [array]$pipelines
 )
 
 . "$PSScriptRoot\Utility-Functions.ps1"
@@ -53,16 +54,17 @@ function ExtractChangeRequestNumber {
 }
 
 # After processing tickets, find and approve pending pipeline runs
-Write-Output "========================================="
-Write-Output "Checking for pending pipeline runs..."
+Write-Host "========================================="
+Write-Host "Checking for pending pipeline runs..."
 
-$pendingRuns = Get-PendingPipelineRuns -organization $organization -project $project -branchName $targetBranch -headers $headers
+$pendingRuns = Get-LatestPipelineRuns -organization $organization -project $project -branchName $targetBranch -headers $headers -pipelines $pipelines
 
 # Create output file path
 $outputFile = "Release-Note-Info-$(Get-Date -Format 'yyyyMMdd-HHmmss').csv"
+$pipelineResults = @()
 
 if ($pendingRuns.Count -gt 0) {
-    Write-Output "Found $($pendingRuns.Count) pending pipeline runs. Extracting release info..."
+    Write-Host "Found $($pendingRuns.Count) pending pipeline runs. Extracting release info..."
     
     # Write header to file
     "PipelineName,BuildName,ChangeRequest #,BuildUrl" | Out-File -FilePath $outputFile -Encoding UTF8
@@ -70,21 +72,30 @@ if ($pendingRuns.Count -gt 0) {
     foreach ($run in $pendingRuns) {
         $chgId = ExtractChangeRequestNumber -buildId $run.BuildId
 
-        # Write-Output "Pipeline: $($run.PipelineName) (ID: $($run.PipelineId))"
-        # Write-Output "Build ID: $($run.BuildId)"
-        # Write-Output "Build Name: $($run.BuildName)"
-        # Write-Output "Build URL: $($run.BuildUrl)"
-        # Write-Output "Change Request #: $($chgId)"
+        $pipelineResults += [PSCustomObject]@{
+            PipelineName = $run.PipelineName
+            BuildName      = $run.BuildName
+        }
+        # Write-Host "Pipeline: $($run.PipelineName) (ID: $($run.PipelineId))"
+        # Write-Host "Build ID: $($run.BuildId)"
+        # Write-Host "Build Name: $($run.BuildName)"
+        # Write-Host "Build URL: $($run.BuildUrl)"
+        # Write-Host "Change Request #: $($chgId)"
         
-        # Write-Output "---"
+        # Write-Host "---"
         
         # Write data to file in CSV format
         "$($run.PipelineName),$($run.BuildName),$($chgId),$($run.BuildUrl)" | Out-File -FilePath $outputFile -Append -Encoding UTF8
     }
     
-    Write-Output "Pipeline information has been saved to: $outputFile"
+    Write-Host "Pipeline information has been saved to: $outputFile"
 }
 else {
-    Write-Output "No pending pipeline runs found for branch $targetBranch"
+    Write-Host "No pending pipeline runs found for branch $targetBranch"
+}
+
+if ($pipelineResults.Count -gt 0) {
+    # Return as JSON for easy consumption
+    $pipelineResults | ConvertTo-Json -Depth 3
 }
 

@@ -209,39 +209,43 @@ function Get-LinkedTicketIdsFromRepos {
     return $distinctTicketIds
 }
 
-function Get-PendingPipelineRuns {
+function Get-LatestPipelineRuns {
     param (
         [string]$organization,
         [string]$project,
         [string]$branchName,
-        [hashtable]$headers
+        [hashtable]$headers,
+        [array]$pipelines
     )
 
     $pipelinesUrl = "https://dev.azure.com/$organization/$project/_apis/pipelines?api-version=7.1"
     
     try {
-        $pipelines = Invoke-RestMethod -Uri $pipelinesUrl -Headers $headers -Method Get
+        $allPipelines = Invoke-RestMethod -Uri $pipelinesUrl -Headers $headers -Method Get
         $pendingRuns = @()
 
-        foreach ($pipeline in $pipelines.value) {
-            $runsUrl = "https://dev.azure.com/$organization/$project/_apis/pipelines/$($pipeline.id)/runs?api-version=7.1&branchName=$($branchName)"
-            
-            $runs = Invoke-RestMethod -Uri $runsUrl -Headers $headers -Method Get
+        foreach ($pipeline in $allPipelines.value) {
+            if ($pipelines -contains $pipeline.name) 
+            {
+                $runsUrl = "https://dev.azure.com/$organization/$project/_apis/pipelines/$($pipeline.id)/runs?api-version=7.1&branchName=$($branchName)"
+                
+                $runs = Invoke-RestMethod -Uri $runsUrl -Headers $headers -Method Get
 
-            # Get the latest run that needs approval
-            $latestPendingRun = $runs.value | 
-                Where-Object { $_.state -eq 'inProgress' } | 
-                Sort-Object createdDate -Descending | 
-                Select-Object -First 1
+                # Get the latest run that needs approval
+                $latestPendingRun = $runs.value | 
+                    # Where-Object { $_.state -eq 'inProgress' } | 
+                    Sort-Object createdDate -Descending | 
+                    Select-Object -First 1
 
-            if ($latestPendingRun) {
-                $pendingRuns += [PSCustomObject]@{
-                    PipelineId = $pipeline.id
-                    PipelineName = $pipeline.name
-                    BuildId = $latestPendingRun.id
-                    CreatedDate = $latestPendingRun.createdDate
-                    BuildName = $latestPendingRun.name
-                    BuildUrl = "https://dev.azure.com/$organization/$project/_build/results?buildId=$($latestPendingRun.id)"
+                if ($latestPendingRun) {
+                    $pendingRuns += [PSCustomObject]@{
+                        PipelineId = $pipeline.id
+                        PipelineName = $pipeline.name
+                        BuildId = $latestPendingRun.id
+                        CreatedDate = $latestPendingRun.createdDate
+                        BuildName = $latestPendingRun.name
+                        BuildUrl = "https://dev.azure.com/$organization/$project/_build/results?buildId=$($latestPendingRun.id)"
+                    }
                 }
             }
         }
