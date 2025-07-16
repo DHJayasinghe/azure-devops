@@ -4,7 +4,8 @@ param (
     [string]$pat,
     [string]$targetBranch,
     [string]$changeRequestSearchPrefix,
-    [array]$pipelines
+    [array]$pipelines,
+    [string] $tagPrefix
 )
 
 . "$PSScriptRoot\Utility-Functions.ps1"
@@ -57,7 +58,7 @@ function ExtractChangeRequestNumber {
 Write-Host "========================================="
 Write-Host "Checking for pending pipeline runs..."
 
-$pendingRuns = Get-LatestPipelineRuns -organization $organization -project $project -branchName $targetBranch -headers $headers -pipelines $pipelines
+$pendingRuns = Get-BranchLatestPipelineRuns -organization $organization -project $project -branchName $targetBranch -headers $headers -pipelines $pipelines -tagPrefix $tagPrefix
 
 # Create output file path
 $outputFile = "Release-Note-Info-$(Get-Date -Format 'yyyyMMdd-HHmmss').csv"

@@ -20,11 +20,9 @@ $repoTaggingPrefix = 'Sep25'  # Suggestion - Can we standardize this to use the 
 $organization = "Next-Technology"
 $project = "Ecom.Sale"
 $boardColumnField = "WEF_C20432DD5A1E4B66931BC16E0AC05E8C_Kanban.Column"
-$repositories = @("ecm-sale-frontend")
-# $repositories = @("ecm-sale-frontend","ecm-sale-admin","ecm-sale-admin-frontend","ecm-vip-searchfeed","ecm-sale-mainframe-agents","ecm-sale-session-agents","ecm-sale-payments-agents")
 $pipelines = @(
     @{ Name = "ecm-sale-web"; Repo = "ecm-sale-frontend"; BuildName = "NA" },
-    @{ Name = "ecm-sale-search-service"; Repo = "NA"; BuildName = "NA" },
+    @{ Name = "ecm-sale-search-service"; Repo = "ecm-sale-frontend"; BuildName = "NA" },
     @{ Name = "ecm-sale-admin-deploy"; Repo = "ecm-sale-admin"; BuildName = "NA" },
     @{ Name = "ecm-sale-admin-frontend"; Repo = "ecm-sale-admin-frontend"; BuildName = "NA" },
     @{ Name = "ecm-vip-searchfeed"; Repo = "ecm-vip-searchfeed"; BuildName = "NA" },
@@ -32,6 +30,7 @@ $pipelines = @(
     @{ Name = "ecm-sale-session-agents-deploy"; Repo = "ecm-sale-session-agents"; BuildName = "NA" },
     @{ Name = "ecm-sale-payments-agents-deploy"; Repo = "ecm-sale-payments-agents"; BuildName = "NA" }
 )
+$repositories = $pipelines | Select-Object -ExpandProperty Repo | Sort-Object -Unique
 $boardColumnMapping = @{
     "CI Testing" = "UAT Testing"
     "Default" = "Deployed to UAT"
@@ -89,14 +88,14 @@ if($prodDeploymentPrep)
         )
 
     Write-Host "Step 3 - Extracting Release Information"
-    $pipelineNames = $pipelines | ForEach-Object { $_.Name }
     $result = .\extract-release-information.ps1 `
         -organization $organization `
         -project $project  `
         -pat $pat `
         -targetBranch $targetBranch `
         -changeRequestSearchPrefix $changeRequestSearchPrefix `
-        -pipelines $pipelineNames
+        -pipelines $pipelines `
+        -tagPrefix $repoTaggingPrefix
 
     $parsed = $result | ConvertFrom-Json
     foreach ($item in $parsed) {

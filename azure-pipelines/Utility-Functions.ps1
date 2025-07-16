@@ -1,3 +1,5 @@
+$apiVersion = "7.1"
+
 function Get-BranchCommits {
     param (
         [string]$organization,
@@ -11,7 +13,7 @@ function Get-BranchCommits {
     $currentYear = (Get-Date).Year
     $fromDate = "$currentYear-01-01T00:00:00Z"
     
-    $commitsUrl = "https://dev.azure.com/$organization/$project/_apis/git/repositories/$repository/commits?searchCriteria.itemVersion.version=$branchName&api-version=7.1&searchCriteria.includeWorkItems=true&searchCriteria.fromDate=$fromDate&searchCriteria.$top=500"
+    $commitsUrl = "https://dev.azure.com/$organization/$project/_apis/git/repositories/$repository/commits?searchCriteria.itemVersion.version=$branchName&api-version=$apiVersion&searchCriteria.includeWorkItems=true&searchCriteria.fromDate=$fromDate&searchCriteria.$top=500"
     
     try {
         $response = Invoke-RestMethod -Uri $commitsUrl -Headers $headers -Method Get
@@ -19,6 +21,65 @@ function Get-BranchCommits {
     }
     catch {
         Write-Host "Failed to fetch commits for branch: $branchName in repository: $repository"
+        return @()
+    }
+}
+
+function Get-BranchLastestCommitId {
+    param (
+        [string]$organization,
+        [string]$project,
+        [string]$repoName,
+        [string]$branchName,
+        [hashtable]$headers
+    )
+    $baseUrl = "https://dev.azure.com/$organization/$project/_apis/git/repositories/$($repoName)"
+
+    
+    $commitUrl = "$($baseUrl)/commits?searchCriteria.itemVersion.version=$branchName&`$top=1&api-version=$apiVersion"
+    $commitResp = Invoke-RestMethod -Uri $commitUrl -Headers $headers -Method Get
+    
+    $commitId = $commitResp.value[0].commitId
+
+    return $commitId
+}
+
+function Get-TagsForCommit {
+    param (
+        [string]$organization,
+        [string]$project,
+        [string]$repoName,
+        [string]$tagPrefix,
+        [string]$commitId,
+        [hashtable]$headers
+    )
+
+    $baseUrl = "https://dev.azure.com/$organization/$project/_apis/git/repositories/$repoName"
+    $tagsUrl = "$baseUrl/refs?filter=tags/$tagPrefix&api-version=$apiVersion"
+    
+    try {
+        $tagsResponse = Invoke-RestMethod -Uri $tagsUrl -Headers $headers -Method Get
+        $tags = $tagsResponse.value
+
+        $matchingTags = @()
+        foreach ($tag in $tags) {
+            # Resolve the Tag commitId using the annotatedtags API
+            $annotatedTagUrl = "$baseUrl/annotatedtags/$($tag.objectId)?api-version=$apiVersion"
+            try {
+                $tagCommitId = "NA"
+                $annotatedTagResponse = Invoke-RestMethod -Uri $annotatedTagUrl -Headers $headers -Method Get
+                $tagCommitId = $annotatedTagResponse.taggedObject.objectId
+            } catch {
+                $tagCommitId = "ERROR"
+            }
+            if ($tagCommitId -eq $commitId) {
+                $matchingTags += $tag.name
+            }
+        }
+        return $matchingTags
+    }
+    catch {
+        Write-Host "Failed to fetch tags for repo: $repoName"
         return @()
     }
 }
@@ -209,27 +270,36 @@ function Get-LinkedTicketIdsFromRepos {
     return $distinctTicketIds
 }
 
-function Get-LatestPipelineRuns {
+function Get-BranchLatestPipelineRuns {
     param (
         [string]$organization,
         [string]$project,
         [string]$branchName,
         [hashtable]$headers,
-        [array]$pipelines
+        [array]$pipelines,
+        [string] $tagPrefix
     )
-
+    $pendingRuns = @()
     $branchRef = if ($branchName -like 'refs/heads/*') { $branchName } else { "refs/heads/$branchName" }
 
-    $pipelinesUrl = "https://dev.azure.com/$organization/$project/_apis/pipelines?api-version=7.1"
-    
     try {
+        $pipelinesUrl = "https://dev.azure.com/$organization/$project/_apis/pipelines?api-version=$apiVersion"
         $allPipelines = Invoke-RestMethod -Uri $pipelinesUrl -Headers $headers -Method Get
-        $pendingRuns = @()
+        $filteredPipelines = $allPipelines.value | Where-Object {
+            $pipelineName = $_.name
+            $pipelines | Where-Object { $_.Name -eq $pipelineName }
+        }
 
-        foreach ($pipeline in $allPipelines.value) {
-            if ($pipelines -contains $pipeline.name) {
-                $buildsUrl = "https://dev.azure.com/$organization/$project/_apis/build/builds?definitions=$($pipeline.id)&branchName=$($branchRef)&api-version=7.1"
+        foreach ($pipeline in $filteredPipelines) {
+            $repoName = ($pipelines | Where-Object { $_.Name -eq $pipeline.name }).Repo
 
+            $branchLatestCommitId = Get-BranchLastestCommitId -organization $organization -project $project -repoName $repoName -branchName $branchName -headers $headers
+            $commitTags = Get-TagsForCommit -organization $organization -project $project -repoName $repoName -tagPrefix $tagPrefix -commitId $branchLatestCommitId -headers $headers 
+            
+            $branchHasReleaseTag = ($commitTags | Where-Object { $_ -like "refs/tags/$tagPrefix*" })
+
+            if (-not $branchHasReleaseTag) {
+                $buildsUrl = "https://dev.azure.com/$organization/$project/_apis/build/builds?definitions=$($pipeline.id)&branchName=$($branchRef)&api-version=$apiVersion"
                 $buildsResponse = Invoke-RestMethod -Uri $buildsUrl -Headers $headers -Method Get
 
                 $latestBuild = $buildsResponse.value |
@@ -285,6 +355,8 @@ function Approve-PipelineRun {
     }
 }
 
+
+
 function Set-RepoTag {
     param (
         [string]$organization,
@@ -298,7 +370,6 @@ function Set-RepoTag {
 
     # Base URLs
     $baseUrl = "https://dev.azure.com/$organization/$project/_apis/git/repositories/$repoName"
-    $apiVersion = "7.1"
 
     # Check if tag exists
     $checkTagUrl = "$baseUrl/refs?filter=tags/$tagName&api-version=$apiVersion"
@@ -323,10 +394,7 @@ function Set-RepoTag {
         Write-Host "✅ Deleted existing tag '$tagName'"
     }
 
-    # Get the latest commit ID on the given branch
-    $commitUrl = "$baseUrl/commits?searchCriteria.itemVersion.version=$branchName&`$top=1&api-version=$apiVersion"
-    $commitResp = Invoke-RestMethod -Uri $commitUrl -Headers $headers -Method Get
-    $commitId = $commitResp.value[0].commitId
+    $commitId = Get-BranchLastestCommitId -organization $organization -project $project -repoName $repoName -branchName $branchName -headers $headers
 
     # Create the annotated tag
     $createTagUrl = "$baseUrl/annotatedtags?api-version=$apiVersion"

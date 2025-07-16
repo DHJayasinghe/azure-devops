@@ -7,7 +7,8 @@ param (
     [string]$tagPrefix,
     [string]$buildName,
     [string]$dropName,
-    [string]$saleName
+    [string]$saleName,
+    [array]$pipelines
 )
 
 . "$PSScriptRoot\Utility-Functions.ps1"
