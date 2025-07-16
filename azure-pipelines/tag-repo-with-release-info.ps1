@@ -18,7 +18,7 @@ $headers = @{
 }
 
 foreach ($pipeline in $pipelines) {
-    if ($pipeline.Repo -ne "NA" -and $pipeline.BuildName -ne "NA") {
+    if ($pipeline.Repo -ne "NA" -and $pipeline.BuildName -ne "NA" -and $pipeline.Tagging -eq $true) {
         $tagName = "$tagPrefix-$($pipeline.BuildName)"
         $description = "$dropName for $saleName"
         Set-RepoTag -organization $organization -project $project -repoName $pipeline.Repo -tagName $tagName -description $description -branchName $branchName -headers $headers

@@ -21,14 +21,14 @@ $organization = "Next-Technology"
 $project = "Ecom.Sale"
 $boardColumnField = "WEF_C20432DD5A1E4B66931BC16E0AC05E8C_Kanban.Column"
 $pipelines = @(
-    @{ Name = "ecm-sale-web"; Repo = "ecm-sale-frontend"; BuildName = "NA" },
-    @{ Name = "ecm-sale-search-service"; Repo = "ecm-sale-frontend"; BuildName = "NA" },
-    @{ Name = "ecm-sale-admin-deploy"; Repo = "ecm-sale-admin"; BuildName = "NA" },
-    @{ Name = "ecm-sale-admin-frontend"; Repo = "ecm-sale-admin-frontend"; BuildName = "NA" },
-    @{ Name = "ecm-vip-searchfeed"; Repo = "ecm-vip-searchfeed"; BuildName = "NA" },
-    @{ Name = "ecm-sale-mainframe-agents-deploy"; Repo = "ecm-sale-mainframe-agents"; BuildName = "NA" },
-    @{ Name = "ecm-sale-session-agents-deploy"; Repo = "ecm-sale-session-agents"; BuildName = "NA" },
-    @{ Name = "ecm-sale-payments-agents-deploy"; Repo = "ecm-sale-payments-agents"; BuildName = "NA" }
+    @{ Name = "ecm-sale-web"; Repo = "ecm-sale-frontend"; BuildName = "NA"; Tagging = $true },
+    @{ Name = "ecm-sale-search-service"; Repo = "ecm-sale-frontend"; BuildName = "NA"; Tagging = $false },
+    @{ Name = "ecm-sale-admin-deploy"; Repo = "ecm-sale-admin"; BuildName = "NA"; Tagging = $true },
+    @{ Name = "ecm-sale-admin-frontend"; Repo = "ecm-sale-admin-frontend"; BuildName = "NA"; Tagging = $true },
+    @{ Name = "ecm-vip-searchfeed"; Repo = "ecm-vip-searchfeed"; BuildName = "NA"; Tagging = $true },
+    @{ Name = "ecm-sale-mainframe-agents-deploy"; Repo = "ecm-sale-mainframe-agents"; BuildName = "NA"; Tagging = $true },
+    @{ Name = "ecm-sale-session-agents-deploy"; Repo = "ecm-sale-session-agents"; BuildName = "NA"; Tagging = $true },
+    @{ Name = "ecm-sale-payments-agents-deploy"; Repo = "ecm-sale-payments-agents"; BuildName = "NA"; Tagging = $true }
 )
 $repositories = $pipelines | Select-Object -ExpandProperty Repo | Sort-Object -Unique
 $boardColumnMapping = @{
@@ -99,7 +99,7 @@ if($prodDeploymentPrep)
 
     $parsed = $result | ConvertFrom-Json
     foreach ($item in $parsed) {
-        $pipeline = $pipelines | Where-Object { $_.Name -eq $item.PipelineName }
+        $pipeline = $pipelines | Where-Object { $_.Name -eq $item.PipelineName -and $_.Tagging -eq $true }
         if ($null -ne $pipeline) {
             $pipeline.BuildName = $item.BuildName
             Write-Host "Updated BuildName for pipeline '$($pipeline.Name)' to '$($item.BuildName)'"
